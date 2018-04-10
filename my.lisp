@@ -36,14 +36,14 @@
   (read-my-currency-log))
 
 (defun log-main (argv)
-  (declare (ignore argv))
-  (let ((filename (elt *argv* 1)))
+  (let ((filename (elt argv 1)))
     (format t "Reading ~a~%" filename)
     (format t "~a~%" (cl-org-mode::read-org-file filename))))
 
 (defun get-file-name ()
-  (multiple-value-bind (second minute hour date month year day-of-week dst-p tz)
+  (multiple-value-bind (s m h d month year)
       (get-decoded-time)
+    (declare (ignore s m h d))
     (merge-pathnames (format nil "~d/~2,'0d.org" year month) *logdir*)))
 
 (defun record-main (argv)
@@ -63,7 +63,8 @@
       (format out "~%")
       (if date
 	  (format out "  [~a]~%" date)
-	  (multiple-value-bind (s m h date month year d-o-w dst-p tz)
+	  (multiple-value-bind (s m h date month year)
 	      (get-decoded-time)
+	    (declare (ignore s m h))
 	    (format out "  [~4,'0d-~2,'0d-~2,'0d]~%" year month date)))
       (format out "  ~a~%" sum))))
