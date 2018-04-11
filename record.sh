@@ -1,5 +1,5 @@
 #!/bin/sh -e
 
-make record
+make
 
-exec ./record $@
+exec ./finances record $@

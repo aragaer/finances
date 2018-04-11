@@ -84,15 +84,18 @@
        (setf (getf *owned* ,currency) owned))
      ,@body))
 
+(defvar *debug* nil)
+
 (defun currency-change-amount (event)
   (destructuring-bind (event-name currency amount bank)
       (getf event :data)
     (with-owned-currency currency
       (with-slots ((owned-amount amount)) owned
-	(format t "Change: ~a ~a ~,2@f ~a->~a ~a~%"
-		event-name currency
-		amount owned-amount
-		(+ amount owned-amount) bank)
+	(if *debug*
+	    (format t "Change: ~a ~a ~,2@f ~a->~a ~a~%"
+		    event-name currency
+		    amount owned-amount
+		    (+ amount owned-amount) bank))
 	(incf owned-amount amount))))
   event)
 
@@ -108,13 +111,14 @@
 	(with-slots ((new-rate exchange-rate)
 		     (new-amount amount)) owned
 	  (setf (getf event :new-rate) new-rate)
-	  (format t "Exhange: ~a ~a ~,2@f ~a ~a->~a ~a->~a (~,2@f) ~a~%"
-		  event-name currency
-		  amount base
-		  old-amount new-amount
-		  old-rate new-rate
-		  (- new-rate old-rate)
-		  bank)))))
+	  (if *debug*
+	      (format t "Exhange: ~a ~a ~,2@f ~a ~a->~a ~a->~a (~,2@f) ~a~%"
+		      event-name currency
+		      amount base
+		      old-amount new-amount
+		      old-rate new-rate
+		      (- new-rate old-rate)
+		      bank))))))
   event)
 
 (defun process-currency-log (log)

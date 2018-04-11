@@ -3,6 +3,7 @@
   (when (probe-file quicklisp-init)
     (load quicklisp-init)))
 
+(ql:quickload :alexandria :silent t)
 (ql:quickload :cl-org-mode :silent t)
 (ql:quickload :split-sequence :silent t)
 (ql:quickload :unix-options :silent t)
@@ -12,33 +13,37 @@
 (load "write.lisp")
 
 (defvar *logdir* "~/Dropbox/finances/")
-(defvar *currency-log* (merge-pathnames "currency.log" *logdir*))
-(defvar *currency-table* "currency.html")
 
-(defun write-my-html (filename log)
-  (with-open-file (html filename
-			:direction :output
-			:if-exists :supersede
-			:if-does-not-exist :create)
-    (format html "<html><body>")
-    (write-currency-log-as-html html log)
-    (format html "</body></html>")))
-
-(defun read-my-currency-log ()
-  (setf *owned* nil)
-  (write-my-html *currency-table*
-		 (process-currency-log
-		  (read-currency-log *currency-log*)))
-  (format t "~{~a~^~%~}~%" (format-owned)))
+(defun record-to-plist (record)
+  (let ((result (list :title (cl-org-mode:title-of record)
+		      :tags (cl-org-mode:tags-of record))))
+    (loop for keyword in (cl-org-mode:children-of (cl-org-mode:section-of record))
+       do (setf (getf result (cl-org-mode:name-of keyword)) (cl-org-mode:value-of keyword)))
+    result))
 
 (defun currency-main (argv)
-  (declare (ignore argv))
-  (read-my-currency-log))
+  (unix-options:with-cli-options ((cdr argv) t)
+    (summary debug unix-options:&parameters infile outfile)
+    (setf *debug* debug)
+    (setf *owned* nil)
+    (with-open-file (html outfile
+			  :direction :output
+			  :if-exists :supersede
+			  :if-does-not-exist :create)
+      (format html "<html><body>")
+      (write-currency-log-as-html html
+				  (process-currency-log
+				   (read-currency-log infile)))
+      (format html "</body></html>"))
+    (if summary
+      (format t "~{~a~^~%~}~%" (format-owned)))))
 
 (defun log-main (argv)
-  (let ((filename (elt argv 1)))
+  (let ((filename (second argv)))
     (format t "Reading ~a~%" filename)
-    (format t "~a~%" (cl-org-mode::read-org-file filename))))
+    (let ((doc (cl-org-mode:org-parse (pathname filename))))
+      (loop for record in (cl-org-mode:node.out doc)
+	 do (format t "~a~%" (record-to-plist record))))))
 
 (defun get-file-name ()
   (multiple-value-bind (s m h d month year)
@@ -46,9 +51,12 @@
     (declare (ignore s m h d))
     (merge-pathnames (format nil "~d/~2,'0d.org" year month) *logdir*)))
 
+(defvar *tag-regular* "регулярное")
+
 (defun record-main (argv)
-  (unix-options:with-cli-options ((subseq argv 1) t)
-    (unix-options:&parameters
+  (unix-options:with-cli-options ((cdr argv) t)
+    ((regular "regular")
+     unix-options:&parameters
      (date "date")
      (tags "tags")
      (sum "sum"))
@@ -58,13 +66,23 @@
 			 :if-exists :append
 			 :if-does-not-exist :create)
       (format out "* ~{~a~^ ~}" unix-options:free)
-      (if tags
-	  (format out " :~{~a~^:~}:" (split-sequence:split-sequence #\, tags)))
+      (let ((tag-list (split-sequence:split-sequence #\, tags)))
+	(if regular (push *tag-regular* tag-list))
+	(if tag-list
+	    (format out " :~{~a~^:~}:" tag-list)))
       (format out "~%")
+      (format out "#+WHEN: ")
       (if date
-	  (format out "  [~a]~%" date)
+	  (format out "~a" date)
 	  (multiple-value-bind (s m h date month year)
 	      (get-decoded-time)
 	    (declare (ignore s m h))
-	    (format out "  [~4,'0d-~2,'0d-~2,'0d]~%" year month date)))
-      (format out "  ~a~%" sum))))
+	    (format out "~4,'0d-~2,'0d-~2,'0d" year month date)))
+      (format out "~%")
+      (format out "#+SUM: ~a~%" sum))))
+
+(defun main (argv)
+  (alexandria:switch ((second argv) :test #'equal)
+    ("log" (log-main (cdr argv)))
+    ("record" (record-main (cdr argv)))
+    ("currency" (currency-main (cdr argv)))))
