@@ -45,11 +45,16 @@
       (loop for record in (cl-org-mode:node.out doc)
 	 do (format t "~a~%" (record-to-plist record))))))
 
-(defun get-file-name ()
+(defun get-file-name (month-arg)
   (multiple-value-bind (s m h d month year)
       (get-decoded-time)
     (declare (ignore s m h d))
-    (merge-pathnames (format nil "~d/~2,'0d.org" year month) *logdir*)))
+   (if month-arg
+       (let ((year-month (split-sequence:split-sequence #\/ month-arg)))
+	 (setf month (parse-integer (car (last year-month))))
+	 (when (second year-month)
+	   (setf year (parse-integer (first year-month))))))
+   (merge-pathnames (format nil "~4,'0d/~2,'0d.org" year month) *logdir*)))
 
 (defvar *tag-regular* "регулярное")
 (defvar *tag-income* "доход")
@@ -81,10 +86,11 @@
     ((regular "regular")
      (income "income")
      unix-options:&parameters
+     (month "month")
      (date "date")
      (tags "tags")
      (sum "sum"))
-    (let ((filename (get-file-name)))
+    (let ((filename (get-file-name month)))
       (format t "Writing to ~a~%" filename)
       (let ((doc (cl-org-mode:org-parse (if (probe-file filename)
 					    (pathname filename)
@@ -98,7 +104,8 @@
 				     :when (or date (get-date))
 				     :sum sum)))
 	  (setf (cl-org-mode:node.out doc) (append nodes (list new-node)))
-	  (with-open-file (out (get-file-name)
+	  (ensure-directories-exist (directory-namestring filename))
+	  (with-open-file (out filename
 			       :direction :output
 			       :if-exists :supersede
 			       :if-does-not-exist :create)
