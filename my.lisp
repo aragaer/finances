@@ -52,6 +52,7 @@
     (merge-pathnames (format nil "~d/~2,'0d.org" year month) *logdir*)))
 
 (defvar *tag-regular* "регулярное")
+(defvar *tag-income* "доход")
 (defvar *doc-template* "")
 
 (defun get-date ()
@@ -78,6 +79,7 @@
 (defun record-main (argv)
   (unix-options:with-cli-options ((cdr argv) t)
     ((regular "regular")
+     (income "income")
      unix-options:&parameters
      (date "date")
      (tags "tags")
@@ -87,9 +89,10 @@
       (let ((doc (cl-org-mode:org-parse (if (probe-file filename)
 					    (pathname filename)
 					    *doc-template*)))
-	    (tag-list (split-sequence:split-sequence #\, tags))
+	    (tag-list (if tags (split-sequence:split-sequence #\, tags) nil))
 	    (title (format nil "~{~a~^ ~}" unix-options:free)))
 	(if regular (push *tag-regular* tag-list))
+	(if income (push *tag-income* tag-list))
 	(let ((nodes (cl-org-mode:node.out doc))
 	      (new-node (make-record title tag-list
 				     :when (or date (get-date))
