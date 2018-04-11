@@ -52,6 +52,28 @@
     (merge-pathnames (format nil "~d/~2,'0d.org" year month) *logdir*)))
 
 (defvar *tag-regular* "регулярное")
+(defvar *doc-template* "")
+
+(defun get-date ()
+  (multiple-value-bind (s m h date month year)
+      (get-decoded-time)
+    (declare (ignore s m h))
+    (format nil "~4,'0d-~2,'0d-~2,'0d" year month date)))
+
+(defun make-keyword (name value)
+  (make-instance 'cl-org-mode:org-keyword
+		 :optional nil
+		 :name name
+		 :value value))
+
+(defun make-record (title tags &rest keywords)
+  (cl-org-mode:make-node
+   title
+   (make-instance 'cl-org-mode:org-section
+		  :children (loop while keywords
+			       collecting (make-keyword (pop keywords)
+							(pop keywords))))
+   nil :tags tags))
 
 (defun record-main (argv)
   (unix-options:with-cli-options ((cdr argv) t)
@@ -60,26 +82,24 @@
      (date "date")
      (tags "tags")
      (sum "sum"))
-    (format t "Writing to ~a~%" (get-file-name))
-    (with-open-file (out (get-file-name)
-			 :direction :output
-			 :if-exists :append
-			 :if-does-not-exist :create)
-      (format out "* ~{~a~^ ~}" unix-options:free)
-      (let ((tag-list (split-sequence:split-sequence #\, tags)))
+    (let ((filename (get-file-name)))
+      (format t "Writing to ~a~%" filename)
+      (let ((doc (cl-org-mode:org-parse (if (probe-file filename)
+					    (pathname filename)
+					    *doc-template*)))
+	    (tag-list (split-sequence:split-sequence #\, tags))
+	    (title (format nil "~{~a~^ ~}" unix-options:free)))
 	(if regular (push *tag-regular* tag-list))
-	(if tag-list
-	    (format out " :~{~a~^:~}:" tag-list)))
-      (format out "~%")
-      (format out "#+WHEN: ")
-      (if date
-	  (format out "~a" date)
-	  (multiple-value-bind (s m h date month year)
-	      (get-decoded-time)
-	    (declare (ignore s m h))
-	    (format out "~4,'0d-~2,'0d-~2,'0d" year month date)))
-      (format out "~%")
-      (format out "#+SUM: ~a~%" sum))))
+	(let ((nodes (cl-org-mode:node.out doc))
+	      (new-node (make-record title tag-list
+				     :when (or date (get-date))
+				     :sum sum)))
+	  (setf (cl-org-mode:node.out doc) (append nodes (list new-node)))
+	  (with-open-file (out (get-file-name)
+			       :direction :output
+			       :if-exists :supersede
+			       :if-does-not-exist :create)
+	    (cl-org-mode:org-present :normal doc out)))))))
 
 (defun main (argv)
   (alexandria:switch ((second argv) :test #'equal)
